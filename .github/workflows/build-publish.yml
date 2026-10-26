@@ -1,0 +1,43 @@
+name: Build SUHOOLTECH API
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'src/SuhoolTech.Api/**'
+      - '.github/workflows/build-publish.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore
+        run: dotnet restore src/SuhoolTech.Api/SuhoolTech.Api.csproj
+      - name: Install EF tool
+        run: dotnet tool install --global dotnet-ef --version 8.0.11
+      - name: Build
+        run: dotnet build src/SuhoolTech.Api/SuhoolTech.Api.csproj --configuration Release --no-restore
+      - name: Create Identity migration
+        working-directory: src/SuhoolTech.Api
+        run: dotnet ef migrations add InitialIdentity --output-dir Data/Migrations
+      - name: Generate SQL script
+        run: |
+          mkdir -p artifacts
+          dotnet ef migrations script --idempotent --project src/SuhoolTech.Api/SuhoolTech.Api.csproj --output artifacts/Identity-Initial.sql
+      - name: Publish
+        run: dotnet publish src/SuhoolTech.Api/SuhoolTech.Api.csproj --configuration Release --output artifacts/publish
+      - name: Package output
+        run: |
+          mkdir -p artifacts/package
+          cp -R artifacts/publish/. artifacts/package/
+          cp artifacts/Identity-Initial.sql artifacts/package/
+          cp README-AR.md artifacts/package/
+          cd artifacts && zip -r SUHOOLTECH-API-PUBLISH.zip package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SUHOOLTECH-API-PUBLISH-AND-SQL
+          path: artifacts/SUHOOLTECH-API-PUBLISH.zip
+          retention-days: 7
